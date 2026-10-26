@@ -152,6 +152,35 @@ const sv=v=>{setV(v);cur&&render()};
 $('#vg').onclick=()=>sv('grid');$('#vl').onclick=()=>sv('list');$('#vi').onclick=()=>sv('iso');
 $('#up').onclick=()=>cur&&cur.parent&&go(cur.parent);
 
+/* ---- 移動的民眾：沿島邊走道、橋與廣場外圈行走 ---- */
+let people=[],pnodes=[];
+const TAU=Math.PI*2,PC=[0xe8736b,0x5b52c9,0x2fa88f,0xf2b84b,0xd963a8,0x4f9aa3,0xffffff,0x8a6a4a],SK=[0xf1c9a5,0xd9a47c,0x9c6b4a];
+function surfY(x,z){let y=.2;for(const n of pnodes){const d=Math.hypot(x-n.x,z-n.z)-n.edge,v=d<=0?n.top:n.top+(.2-n.top)*Math.min(1,d/.8),w=v+(n.g&&d<.8?n.g.position.y:0);if(w>y)y=w}return y}
+function spawnPeople(parent,nodes,total,mk){
+ pnodes=nodes;people=[];const gb=new THREE.CylinderGeometry(.07,.13,.34,6),gh=new THREE.SphereGeometry(.09,8,6),mats={},mt=c=>mats[c]||(mats[c]=mk(c));
+ for(let i=0;i<total;i++){
+  const ni=nodes.length>1&&i>=3?1+((i-3)%(nodes.length-1)):0,n=nodes[ni],th=Math.random()*TAU,g=new THREE.Group();
+  const b=new THREE.Mesh(gb,mt(PC[i%PC.length])),h=new THREE.Mesh(gh,mt(SK[i%3]));b.position.y=.17;h.position.y=.43;g.add(b,h);g.scale.setScalar(.9+Math.random()*.3);
+  g.position.set(n.x+Math.cos(th)*n.rw,0,n.z+Math.sin(th)*n.rw);g.position.y=surfY(g.position.x,g.position.z);
+  parent.add(g);people.push({g,node:ni,th,pts:[],wait:Math.random()*2,sp:.7+Math.random()*.5,ph:Math.random()*6})}}
+function planRoute(p){
+ const A=pnodes[p.node],H=pnodes[0],pts=[],rp=(n,t)=>({x:n.x+Math.cos(t)*n.rw,z:n.z+Math.sin(t)*n.rw});
+ const arc=(n,t0,t1)=>{const d=((t1-t0+Math.PI)%TAU+TAU)%TAU-Math.PI,k=Math.max(1,Math.ceil(Math.abs(d)/.3));for(let i=1;i<=k;i++)pts.push(rp(n,t0+d*i/k))};
+ const th=p.th,node=p.node;
+ if(pnodes.length<2||Math.random()<.55){const t1=th+(Math.random()-.5)*4;arc(A,th,t1);p.th=t1;return pts}
+ let bi;do{bi=Math.floor(Math.random()*pnodes.length)}while(bi===node);
+ const B=pnodes[bi];let ha=th;
+ if(node!==0){arc(A,th,A.a+Math.PI);pts.push(rp(H,A.a));ha=A.a}
+ if(bi===0){const t1=Math.random()*TAU;arc(H,ha,t1);p.th=t1}
+ else{arc(H,ha,B.a);const g=B.a+Math.PI,t1=g+(Math.random()-.5)*4;pts.push(rp(B,g));arc(B,g,t1);p.th=t1}
+ p.node=bi;return pts}
+function stepPeople(dt,t){for(const p of people){const g=p.g;
+ if(!p.pts.length){if(p.wait>0){p.wait-=dt;continue}p.pts=planRoute(p);p.wait=.4+Math.random()*3}
+ let s=p.sp*dt;
+ while(s>0&&p.pts.length){const q=p.pts[0],dx=q.x-g.position.x,dz=q.z-g.position.z,d=Math.hypot(dx,dz);
+  if(d<1e-4){p.pts.shift();continue}g.rotation.y=Math.atan2(dx,dz);
+  if(d<=s){g.position.x=q.x;g.position.z=q.z;s-=d;p.pts.shift()}else{g.position.x+=dx/d*s;g.position.z+=dz/d*s;s=0}}
+ g.position.y=surfY(g.position.x,g.position.z)+(p.pts.length?Math.abs(Math.sin(t*9+p.ph))*.04:0)}}
 /* ---- 3D 島嶼檢視：資料夾＝島嶼、檔案＝房子 ---- */
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches,MAXH=300,MAXI=40;
 const PAL=['#e8736b','#5b52c9','#2fa88f','#f2b84b','#d963a8','#4f9aa3'];
@@ -202,7 +231,7 @@ function stepEnv(k){const t=TOD[night?'night':'day'],e=T.env,c=T.tc;
  T.water.material.color.copy(e.w);T.wallM.emissiveIntensity=e.gl;$('#stage').style.background='#'+e.bg.getHexString()}
 function tick(now){requestAnimationFrame(tick);if(view!=='iso'||!T||$('#stage').hidden)return;stepEnv(reduce?1:.06);
  if(flight){const k=Math.min(1,(now-flight.s)/flight.d),q=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;T.cam.position.lerpVectors(flight.p0,flight.p1,q);T.ctl.target.lerpVectors(flight.t0,flight.t1,q);if(k>=1){const f=flight.done;flight=null;f&&f()}}
- if(!reduce){const p=T.water.geometry.attributes.position,t=now/1000,b=T.wb;for(let i=0;i<p.count;i++)p.array[i*3+1]=Math.sin(b[i*3]*.25+t)*.18+Math.cos(b[i*3+2]*.22+t*.8)*.18;p.needsUpdate=true;bobs.forEach(g=>{g.position.y=Math.sin(t*.9+g.userData.ph)*.12})}
+ if(!reduce){const p=T.water.geometry.attributes.position,t=now/1000,b=T.wb;for(let i=0;i<p.count;i++)p.array[i*3+1]=Math.sin(b[i*3]*.25+t)*.18+Math.cos(b[i*3+2]*.22+t*.8)*.18;p.needsUpdate=true;bobs.forEach(g=>{g.position.y=Math.sin(t*.9+g.userData.ph)*.12});stepPeople(Math.min((now-(T.lt||now))/1000,.1),t);T.lt=now}
  T.ctl.update();T.r.render(T.sc,T.cam)}
 $('#tod').onclick=()=>{night=!night;document.documentElement.dataset.theme=night?'dark':'light'};
 async function buildWorld(list,my){
@@ -232,6 +261,7 @@ async function buildWorld(list,my){
   for(let t=0;t<4;t++){const q=t*1.6+i,x=Math.cos(q)*2.9,z=Math.sin(q)*2.9;g.add(mesh(new THREE.CylinderGeometry(.07,.09,.45,6),M3(0x8a6a4a),x,.95,z),mesh(new THREE.ConeGeometry(.38,.9,7),M3(0x4f9a5a),x,1.5,z))}
   const lb=lbl(d.name,n<0?'多項…':n+' 項',col);lb.position.y=4.6;g.add(lb);world.add(g);
   const L=R-ISL-Rh+.4,mid=(Rh+R-ISL)/2,br=mesh(new THREE.BoxGeometry(L,.14,.9),M3(0xcaa77a),Math.cos(a)*mid,.1,Math.sin(a)*mid);br.rotation.y=-a;world.add(br)});
+ spawnPeople(world,[{x:0,z:0,rw:Math.max(1.5,Rh-.7),edge:Rh-.4,top:.75,a:0}].concat(bobs.map((g,i)=>({x:g.position.x,z:g.position.z,rw:2.3,edge:3.2,top:.75,a:i/nI*6.283+.5,g}))),Math.min(40,nI?3+nI*2:3),M3);
  if(lastCur!==cur){lastCur=cur;const span=(nI?R+ISL:Rh)+2,p=new THREE.Vector3(0,span*1.1+4,span*1.6+4);
   T.cam.position.copy(p).multiplyScalar(.6);T.ctl.target.set(0,0,0);fly(p,new THREE.Vector3(),null,1100)}
 }
