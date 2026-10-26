@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>本地檔案瀏覽器</title>
+<style>
+:root{--ink:#241f3a;--mute:#6b6585;--bg:#fbf3ea;--card:#fff;--side:#f3e8da;--acc:#e8736b;--acc2:#5b52c9;--line:rgba(36,31,58,.12)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#f1ecff;--mute:#a9a3c4;--bg:#17142a;--card:#221e3b;--side:#1d1935;--line:rgba(255,255,255,.14)}}
+:root[data-theme="dark"]{--ink:#f1ecff;--mute:#a9a3c4;--bg:#17142a;--card:#221e3b;--side:#1d1935;--line:rgba(255,255,255,.14)}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.brand{font-weight:800;margin-right:6px}.brand b{color:var(--acc)}
+.btn,select,input[type=search]{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 14px}
+.btn{cursor:pointer;font-weight:600}.btn.p{background:var(--acc2);border-color:var(--acc2);color:#fff}.btn.on{background:var(--ink);color:var(--bg)}
+input[type=search]{flex:1;min-width:120px;max-width:300px}
+.app{flex:1;display:flex;min-height:0}
+aside{width:260px;background:var(--side);border-right:1px solid var(--line);overflow:auto;padding:8px;font-size:.92rem}
+.tn{display:flex;align-items:center;gap:4px;padding:3px 6px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.tn:hover{background:var(--line)}.tn.sel{background:var(--acc);color:#fff}
+.kid{margin-left:14px}
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+.crumb{padding:8px 16px;color:var(--mute);font-size:.9rem;overflow-x:auto;white-space:nowrap}
+.crumb a{color:var(--acc2);cursor:pointer;text-decoration:underline}
+#items{flex:1;overflow:auto;padding:4px 16px 20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px}
+.it{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center;cursor:pointer;min-width:0}
+.it:hover{box-shadow:0 8px 22px rgba(36,31,58,.15)}
+.ic{height:84px;display:grid;place-items:center;font-size:2.6rem}
+.ic img{max-width:100%;max-height:84px;border-radius:8px;object-fit:cover}
+.nm{font-size:.86rem;word-break:break-all;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sz{font-size:.76rem;color:var(--mute)}
+.list .it{display:flex;align-items:center;gap:12px;text-align:left;border-radius:10px;padding:6px 12px;margin-bottom:6px}
+.list .ic{height:auto;font-size:1.4rem;width:30px}.list .nm{flex:1;-webkit-line-clamp:1}.list .sz{width:170px;text-align:right}
+.empty{padding:60px 20px;text-align:center;color:var(--mute)}
+dialog{border:1px solid var(--line);border-radius:18px;background:var(--card);color:var(--ink);width:min(900px,94vw);max-height:90vh;padding:0}
+dialog::backdrop{background:rgba(10,8,25,.6)}
+.dh{display:flex;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.dh h2{flex:1;margin:0;font-size:1.05rem;word-break:break-all}
+.db{padding:14px 16px;overflow:auto;max-height:70vh}
+.db img,.db video{max-width:100%;max-height:62vh;display:block;margin:auto}
+.db audio{width:100%}.db iframe{width:100%;height:62vh;border:0}
+.db pre{margin:0;white-space:pre-wrap;word-break:break-word;font:.84rem/1.5 ui-monospace,Menlo,Consolas,monospace}
+.meta{color:var(--mute);font-size:.84rem;margin:0 0 10px}
+@media (max-width:720px){aside{display:none}.list .sz{display:none}}
+#stage{flex:1;position:relative;min-height:0;background:#cfe9f2}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:4px 10px;font-size:.82rem;z-index:5;max-width:260px;word-break:break-all}
+#lg{position:absolute;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));background:var(--side);color:var(--ink);border:1px solid var(--line);border-radius:99px;padding:5px 14px;font-size:.78rem;pointer-events:none;opacity:.92}
+#lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin:0 3px 0 6px}
+#stage[hidden],#tip[hidden]{display:none}
+</style></head><body>
+<header><span class="brand">本地<b>檔案</b>瀏覽器</span>
+<button class="btn p" id="pick">📂 選擇資料夾</button>
+<input type="search" id="q" placeholder="搜尋目前資料夾…" aria-label="搜尋">
+<select id="sort" aria-label="排序"><option value="name">名稱</option><option value="size">大小</option><option value="date">修改時間</option></select>
+<button class="btn" id="up">⬆ 上一層</button><button class="btn on" id="vi">🏝 島嶼</button><button class="btn" id="vg">▦ 縮圖</button><button class="btn" id="vl">☰ 列表</button><button class="btn" id="tod" aria-label="切換日夜">☀︎/☾</button>
+<input type="file" id="fb" webkitdirectory multiple hidden></header>
+<div class="app"><aside id="tree" aria-label="資料夾樹"></aside>
+<main><div class="crumb" id="crumb"></div>
+<div id="items" tabindex="-1"><div class="empty">按「選擇資料夾」開始瀏覽。<br>檔案只在你的瀏覽器內讀取，不會上傳。</div></div><div id="stage" hidden><canvas id="cv" role="img" aria-label="3D 島嶼場景：島嶼是資料夾，房子是檔案"></canvas><div id="tip" hidden></div><div id="lg"><i style="background:#e8736b"></i>圖片 <i style="background:#5b52c9"></i>影片 <i style="background:#d963a8"></i>音訊 <i style="background:#c0392b"></i>PDF <i style="background:#2fa88f"></i>文字 <i style="background:#f2b84b"></i>其他 · 房子越高檔案越大 · 點島嶼進入資料夾 · 點房子預覽</div></div></main></div>
+<dialog id="dlg"><div class="dh"><h2 id="dt"></h2><a class="btn" id="dl">下載</a><button class="btn" id="dx">關閉</button></div><div class="db" id="dbody"></div></dialog>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const E={img:'png jpg jpeg gif webp svg bmp avif ico'.split(' '),vid:'mp4 webm mov m4v ogv'.split(' '),aud:'mp3 wav ogg m4a flac aac'.split(' '),pdf:['pdf'],
+ txt:'txt md json js ts jsx tsx css html htm xml csv tsv log yml yaml ini py java c cpp h go rs sh bat sql toml'.split(' ')};
+const ext=n=>(n.split('.').pop()||'').toLowerCase();
+const icon=n=>{if(n.kind==='dir')return'📁';const e=ext(n.name);return E.img.includes(e)?'🖼️':E.vid.includes(e)?'🎬':E.aud.includes(e)?'🎵':e==='pdf'?'📕':E.txt.includes(e)?'📄':'📦'};
+const fmt=b=>b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':b<1073741824?(b/1048576).toFixed(1)+' MB':(b/1073741824).toFixed(2)+' GB';
+let root,cur,view='iso',urls=[],token=0;
+const mk=(name,parent,o)=>Object.assign({name,parent},o);
+async function kids(n){
+ if(n.kids)return n.kids;
+ if(n.handle){const a=[];try{for await(const [nm,h] of n.handle.entries())a.push(mk(nm,n,h.kind==='directory'?{kind:'dir',handle:h}:{kind:'file',handle:h}))}catch(e){}n.kids=a}
+ return n.kids||[];
+}
+const fileOf=async n=>n.file||n.handle.getFile();
+async function meta(n){if(n.kind==='dir')return{size:0,date:0};if(!n.m){try{const f=await fileOf(n);n.m={size:f.size,date:f.lastModified}}catch(e){n.m={size:0,date:0}}}return n.m}
+function fromList(files){
+ const r=mk(files[0].webkitRelativePath.split('/')[0],null,{kind:'dir',kids:[]});
+ for(const f of files){const p=f.webkitRelativePath.split('/').slice(1);let d=r;
+  p.forEach((s,i)=>{if(i===p.length-1){d.kids.push(mk(s,d,{kind:'file',file:f}))}else{let x=d.kids.find(k=>k.kind==='dir'&&k.name===s);if(!x){x=mk(s,d,{kind:'dir',kids:[]});d.kids.push(x)}d=x}})}
+ return r;
+}
+async function start(r){root=r;cur=r;r.open=true;await renderTree();await go(r)}
+$('#pick').onclick=async()=>{
+ if(window.showDirectoryPicker){try{const h=await showDirectoryPicker({mode:'read'});await start(mk(h.name,null,{kind:'dir',handle:h}))}catch(e){if(e.name!=='AbortError')$('#fb').click()}}
+ else $('#fb').click();
+};
+$('#fb').onchange=async e=>{const fs=[...e.target.files];if(fs.length)await start(fromList(fs))};
+async function renderTree(){
+ const box=$('#tree');box.innerHTML='';
+ async function draw(n,host){
+  const row=document.createElement('div');row.className='tn'+(n===cur?' sel':'');row.textContent=(n.open?'▾ ':'▸ ')+'📁 '+n.name;host.appendChild(row);
+  const wrap=document.createElement('div');wrap.className='kid';host.appendChild(wrap);
+  row.onclick=async()=>{n.open=!n.open||n!==cur;await go(n)};
+  if(n.open)for(const k of(await kids(n)).filter(k=>k.kind==='dir').sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant')))await draw(k,wrap);
+ }
+ await draw(root,box);
+}
+async function go(n){cur=n;for(let p=n.parent;p;p=p.parent)p.open=true;await renderTree();await render()}
+async function render(){
+ const my=++token;urls.forEach(URL.revokeObjectURL);urls=[];
+ let iso=view==='iso';
+ if(iso&&!T){try{initScene()}catch(e){console.warn(e);setV('grid');iso=false;$('#vi').disabled=true;$('#vi').title='無法使用 3D：需要連網載入 Three.js 並支援 WebGL'}}
+ $('#stage').hidden=!iso;$('#items').hidden=iso;if(iso)rsz();
+ const crumbs=[];for(let n=cur;n;n=n.parent)crumbs.unshift(n);
+ $('#crumb').innerHTML=crumbs.map((n,i)=>i<crumbs.length-1?`<a data-i="${i}">${esc(n.name)}</a>`:esc(n.name)).join(' / ');
+ $('#crumb').onclick=e=>{const a=e.target.closest('[data-i]');if(a)go(crumbs[+a.dataset.i])};
+ const q=$('#q').value.trim().toLowerCase(),s=$('#sort').value;
+ let list=(await kids(cur)).filter(k=>!q||k.name.toLowerCase().includes(q));
+ if(s!=='name')await Promise.all(list.slice(0,3000).map(meta));
+ if(my!==token)return;
+ list.sort((a,b)=>{if(a.kind!==b.kind)return a.kind==='dir'?-1:1;
+  if(s==='size')return((b.m||{}).size||0)-((a.m||{}).size||0);if(s==='date')return((b.m||{}).date||0)-((a.m||{}).date||0);return a.name.localeCompare(b.name,'zh-Hant',{numeric:true})});
+ if(iso){await buildWorld(list,my);return}
+ const box=$('#items');box.className=view;
+ if(!list.length){box.innerHTML='<div class="empty">這裡沒有符合的項目。</div>';return}
+ box.innerHTML=(view==='grid'?'<div class="grid">':'<div>')+list.map((n,i)=>`<div class="it" data-k="${i}" tabindex="0" role="button"><div class="ic">${icon(n)}</div><div class="nm">${esc(n.name)}</div><div class="sz" data-s="${i}">${n.kind==='dir'?'資料夾':''}</div></div>`).join('')+'</div>';
+ box.firstChild.className=view==='grid'?'grid':'';
+ const act=i=>list[i].kind==='dir'?go(list[i]):preview(list[i]);
+ box.firstChild.onclick=e=>{const t=e.target.closest('[data-k]');if(t)act(+t.dataset.k)};
+ box.firstChild.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){const t=e.target.closest('[data-k]');if(t){e.preventDefault();act(+t.dataset.k)}}};
+ for(let i=0;i<list.length&&my===token;i++){const n=list[i];if(n.kind!=='file')continue;
+  const m=await meta(n),el=box.querySelector(`[data-s="${i}"]`);if(!el)break;
+  el.textContent=fmt(m.size)+(view==='list'?' · '+new Date(m.date).toLocaleDateString('zh-TW'):'');
+  if(view==='grid'&&E.img.includes(ext(n.name))&&m.size<8e6){const f=await fileOf(n),u=URL.createObjectURL(f);urls.push(u);const ic=box.querySelector(`[data-k="${i}"] .ic`);if(ic)ic.innerHTML=`<img src="${u}" alt="" loading="lazy">`}
+ }
+}
+async function preview(n){
+ const f=await fileOf(n),e=ext(n.name),u=URL.createObjectURL(f);urls.push(u);
+ $('#dt').textContent=n.name;$('#dl').href=u;$('#dl').download=n.name;
+ let b=`<p class="meta">${fmt(f.size)} · ${esc(f.type||'未知類型')} · ${new Date(f.lastModified).toLocaleString('zh-TW',{hour12:false})}</p>`;
+ if(E.img.includes(e))b+=`<img src="${u}" alt="${esc(n.name)}">`;
+ else if(E.vid.includes(e))b+=`<video controls src="${u}"></video>`;
+ else if(E.aud.includes(e))b+=`<audio controls src="${u}"></audio>`;
+ else if(e==='pdf')b+=`<iframe src="${u}" title="${esc(n.name)}"></iframe>`;
+ else if(E.txt.includes(e)||(f.type||'').startsWith('text/')){const t=await f.slice(0,200000).text();b+=`<pre>${esc(t)}</pre>`+(f.size>200000?'<p class="meta">僅顯示前 200 KB。</p>':'')}
+ else b+='<p>此類型無法預覽，可直接下載。</p>';
+ $('#dbody').innerHTML=b;$('#dlg').showModal();
+}
+$('#dx').onclick=()=>$('#dlg').close();
+$('#dlg').onclose=()=>{$('#dbody').innerHTML=''};
+$('#q').oninput=()=>cur&&render();$('#sort').onchange=()=>cur&&render();
+const setV=v=>{view=v;[['g','grid'],['l','list'],['i','iso']].forEach(([k,n])=>$('#v'+k).classList.toggle('on',v===n))};
+const sv=v=>{setV(v);cur&&render()};
+$('#vg').onclick=()=>sv('grid');$('#vl').onclick=()=>sv('list');$('#vi').onclick=()=>sv('iso');
+$('#up').onclick=()=>cur&&cur.parent&&go(cur.parent);
+
+/* ---- 3D 島嶼檢視：資料夾＝島嶼、檔案＝房子 ---- */
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches,MAXH=300,MAXI=40;
+const PAL=['#e8736b','#5b52c9','#2fa88f','#f2b84b','#d963a8','#4f9aa3'];
+const TOD={day:{bg:0xcfe9f2,hs:0xffffff,hg:0xb8d8b0,hi:.95,d:0xfff4dc,di:.9,w:0x6cc3d0,gl:0},night:{bg:0x141a3a,hs:0x6f7bd0,hg:0x1c2347,hi:.55,d:0x8fa6ff,di:.35,w:0x1f3a6b,gl:.9}};
+let T=null,world,pick=[],bobs=[],flight=null,lastCur=null,night=matchMedia('(prefers-color-scheme:dark)').matches;
+const M3=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,flatShading:true},o));
+const mesh=(g,m,x,y,z)=>{const o=new THREE.Mesh(g,m);o.position.set(x,y,z);return o};
+const cyl=(a,b,h)=>new THREE.CylinderGeometry(a,b,h,36);
+const colorOf=n=>{const e=ext(n.name);return E.img.includes(e)?'#e8736b':E.vid.includes(e)?'#5b52c9':E.aud.includes(e)?'#d963a8':e==='pdf'?'#c0392b':E.txt.includes(e)?'#2fa88f':'#f2b84b'};
+function lbl(t,sub,col){const c=document.createElement('canvas');c.width=640;c.height=160;const x=c.getContext('2d');
+ x.fillStyle='rgba(255,255,255,.95)';x.beginPath();x.moveTo(68,16);x.arcTo(632,16,632,136,60);x.arcTo(632,136,8,136,60);x.arcTo(8,136,8,16,60);x.arcTo(8,16,632,16,60);x.fill();
+ x.fillStyle=col;x.beginPath();x.arc(64,76,22,0,7);x.fill();x.fillStyle='#241f3a';x.textBaseline='middle';
+ const f='"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif';x.font='700 48px '+f;x.fillText(t,104,66,500);x.fillStyle='#6b6585';x.font='500 28px '+f;x.fillText(sub,106,110,500);
+ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,fog:false}));s.scale.set(6,1.5,1);return s}
+function initScene(){
+ if(!window.THREE||!THREE.OrbitControls)throw new Error('Three.js 未載入');
+ const cv=$('#cv'),r=new THREE.WebGLRenderer({canvas:cv,antialias:true});r.setPixelRatio(Math.min(devicePixelRatio||1,2));
+ const sc=new THREE.Scene();sc.background=new THREE.Color(0xcfe9f2);sc.fog=new THREE.Fog(0xcfe9f2,40,170);
+ const cam=new THREE.PerspectiveCamera(45,1,.1,500),ctl=new THREE.OrbitControls(cam,cv);
+ ctl.enableDamping=true;ctl.maxPolarAngle=Math.PI*.47;ctl.minDistance=4;ctl.maxDistance=150;ctl.addEventListener('start',()=>{flight=null});
+ const hemi=new THREE.HemisphereLight(0xffffff,0xb8d8b0,.95),dl=new THREE.DirectionalLight(0xfff4dc,.9);dl.position.set(20,30,10);sc.add(hemi,dl);
+ const wg=new THREE.PlaneGeometry(420,420,40,40);wg.rotateX(-Math.PI/2);
+ const water=new THREE.Mesh(wg,M3(0x6cc3d0,{roughness:.35,transparent:true,opacity:.93}));water.position.y=-.9;sc.add(water);
+ world=new THREE.Group();sc.add(world);
+ T={cv,r,sc,cam,ctl,hemi,dl,water,wb:Float32Array.from(wg.attributes.position.array),wallM:M3(0xfff6e8,{emissive:0xffc872,emissiveIntensity:0}),tc:new THREE.Color(),ray:new THREE.Raycaster(),pt:new THREE.Vector2(),
+  env:{bg:new THREE.Color(0xcfe9f2),hs:new THREE.Color(0xffffff),hg:new THREE.Color(0xb8d8b0),d:new THREE.Color(0xfff4dc),w:new THREE.Color(0x6cc3d0),hi:.95,di:.9,gl:0}};
+ let dn=null;
+ cv.addEventListener('pointerdown',e=>{dn={x:e.clientX,y:e.clientY}});
+ cv.addEventListener('pointerup',e=>{if(!dn)return;const m=Math.hypot(e.clientX-dn.x,e.clientY-dn.y)>6;dn=null;if(m)return;const h=hit(e);if(h)act3(h.object)});
+ cv.addEventListener('pointermove',e=>{if(dn)return;const h=hit(e);cv.style.cursor=h?'pointer':'grab';showTip(h,e)});
+ cv.addEventListener('pointerleave',hideTip);
+ new ResizeObserver(rsz).observe($('#stage'));requestAnimationFrame(tick);
+}
+function rsz(){if(!T)return;const s=$('#stage'),w=s.clientWidth,h=s.clientHeight;if(!w||!h)return;T.r.setSize(w,h,false);T.cam.aspect=w/h;T.cam.fov=w/h<.8?58:45;T.cam.updateProjectionMatrix()}
+function hit(e){const b=T.cv.getBoundingClientRect();T.pt.set((e.clientX-b.left)/b.width*2-1,-(e.clientY-b.top)/b.height*2+1);T.ray.setFromCamera(T.pt,T.cam);return T.ray.intersectObjects(pick,false)[0]||null}
+const tip=$('#tip'),hideTip=()=>{tip.hidden=true};
+function showTip(h,e){if(!h){hideTip();return}const n=h.object.userData.node,b=$('#stage').getBoundingClientRect();
+ tip.textContent=n.kind==='dir'?'📁 '+n.name+'（點擊進入）':icon(n)+' '+n.name+(n.m?' · '+fmt(n.m.size):'');
+ tip.style.left=Math.max(4,Math.min(e.clientX-b.left+14,b.width-220))+'px';tip.style.top=(e.clientY-b.top+14)+'px';tip.hidden=false}
+function fly(p1,t1,done,dur){if(reduce){T.cam.position.copy(p1);T.ctl.target.copy(t1);done&&done();return}flight={p0:T.cam.position.clone(),t0:T.ctl.target.clone(),p1,t1,s:performance.now(),d:dur||1000,done}}
+function act3(o){const n=o.userData.node;if(n.kind==='file'){preview(n);return}
+ const gp=new THREE.Vector3();o.parent.getWorldPosition(gp);const out=gp.clone().setY(0).normalize();
+ fly(gp.clone().add(out.multiplyScalar(7)).add(new THREE.Vector3(0,5,0)),gp.clone().add(new THREE.Vector3(0,1,0)),()=>go(n),700)}
+function stepEnv(k){const t=TOD[night?'night':'day'],e=T.env,c=T.tc;
+ e.bg.lerp(c.set(t.bg),k);e.hs.lerp(c.set(t.hs),k);e.hg.lerp(c.set(t.hg),k);e.d.lerp(c.set(t.d),k);e.w.lerp(c.set(t.w),k);
+ e.hi+=(t.hi-e.hi)*k;e.di+=(t.di-e.di)*k;e.gl+=(t.gl-e.gl)*k;
+ T.sc.background.copy(e.bg);T.sc.fog.color.copy(e.bg);T.hemi.color.copy(e.hs);T.hemi.groundColor.copy(e.hg);T.hemi.intensity=e.hi;T.dl.color.copy(e.d);T.dl.intensity=e.di;
+ T.water.material.color.copy(e.w);T.wallM.emissiveIntensity=e.gl;$('#stage').style.background='#'+e.bg.getHexString()}
+function tick(now){requestAnimationFrame(tick);if(view!=='iso'||!T||$('#stage').hidden)return;stepEnv(reduce?1:.06);
+ if(flight){const k=Math.min(1,(now-flight.s)/flight.d),q=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2;T.cam.position.lerpVectors(flight.p0,flight.p1,q);T.ctl.target.lerpVectors(flight.t0,flight.t1,q);if(k>=1){const f=flight.done;flight=null;f&&f()}}
+ if(!reduce){const p=T.water.geometry.attributes.position,t=now/1000,b=T.wb;for(let i=0;i<p.count;i++)p.array[i*3+1]=Math.sin(b[i*3]*.25+t)*.18+Math.cos(b[i*3+2]*.22+t*.8)*.18;p.needsUpdate=true;bobs.forEach(g=>{g.position.y=Math.sin(t*.9+g.userData.ph)*.12})}
+ T.ctl.update();T.r.render(T.sc,T.cam)}
+$('#tod').onclick=()=>{night=!night;document.documentElement.dataset.theme=night?'dark':'light'};
+async function buildWorld(list,my){
+ if(!T)return;
+ world.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material&&o.material!==T.wallM){if(o.material.map)o.material.map.dispose();o.material.dispose()}});
+ world.clear();pick=[];bobs=[];hideTip();
+ const dirs=list.filter(n=>n.kind==='dir'),files=list.filter(n=>n.kind==='file'),shown=files.slice(0,MAXH),dshown=dirs.slice(0,MAXI),nI=dshown.length;
+ const cnt=d=>Promise.race([kids(d).then(k=>k.length),new Promise(r=>setTimeout(()=>r(-1),1500))]).catch(()=>0);
+ const [cnts]=await Promise.all([Promise.all(dshown.map(cnt)),Promise.all(shown.map(meta))]);
+ if(my!==token)return;
+ const nf=shown.length,c=.72,Rh=Math.max(3,c*Math.sqrt(nf)+1.8),ISL=3.6,R=Math.max(Rh+ISL+5,nI*2.5+Rh*.5);
+ const geoB=new THREE.BoxGeometry(.5,1,.5),geoR=new THREE.ConeGeometry(.38,.4,4),roofs={};
+ const rm=k=>roofs[k]||(roofs[k]=M3(k));
+ function house(g,n,x,z,h,col){const b=new THREE.Mesh(geoB,T.wallM);b.scale.y=h;b.position.set(x,.75+h/2,z);
+  const rf=new THREE.Mesh(geoR,rm(col||colorOf(n)));rf.position.set(x,.75+h+.2,z);rf.rotation.y=Math.PI/4;
+  b.userData.node=n;rf.userData.node=n;g.add(b,rf);pick.push(b,rf)}
+ const hub=new THREE.Group();
+ hub.add(mesh(cyl(Rh,Rh+.4,1.5),M3(0xe9d8a6),0,-.5,0),mesh(cyl(Rh-.4,Rh-.2,.5),M3(0x86c97f),0,.5,0));
+ shown.forEach((n,i)=>{const a=i*2.39996,r=c*Math.sqrt(i+.6),sz=(n.m||{}).size||0;house(hub,n,Math.cos(a)*r,Math.sin(a)*r,Math.min(2.6,.4+Math.log10(sz+10)*.25))});
+ const hl=lbl(cur.name,!nf&&!nI?'空資料夾':nf+' 個檔案'+(files.length>nf?'（顯示前 '+nf+'）':'')+(dirs.length>nI?' · 另有 '+(dirs.length-nI)+' 個資料夾未顯示':''),'#e8736b');hl.position.y=5.4;hub.add(hl);world.add(hub);
+ dshown.forEach((d,i)=>{const g=new THREE.Group(),a=i/nI*6.283+.5,col=PAL[i%PAL.length],n=cnts[i];
+  g.position.set(Math.cos(a)*R,0,Math.sin(a)*R);g.userData.ph=i*1.7;bobs.push(g);
+  const sd=mesh(cyl(ISL,ISL+.5,1.5),M3(0xe9d8a6),0,-.5,0),gr=mesh(cyl(ISL-.4,ISL-.2,.5),M3(0x86c97f),0,.5,0),rg=mesh(new THREE.TorusGeometry(ISL-.25,.09,8,40),M3(col),0,.78,0);rg.rotation.x=Math.PI/2;
+  [sd,gr,rg].forEach(o=>{o.userData.node=d;pick.push(o)});g.add(sd,gr,rg);
+  const kk=n<0?7:Math.min(n,7);for(let k=0;k<kk;k++){const b=k/kk*6.283,rad=kk>3?1.7:.9;house(g,d,Math.cos(b)*rad,Math.sin(b)*rad,.7+((k*37)%5)*.1,col)}
+  const pole=mesh(new THREE.CylinderGeometry(.05,.05,2.2,6),M3(0xffffff),0,1.9,0),fl=mesh(new THREE.PlaneGeometry(.9,.55),M3(col,{side:THREE.DoubleSide}),.46,2.6,0);g.add(pole,fl);
+  for(let t=0;t<4;t++){const q=t*1.6+i,x=Math.cos(q)*2.9,z=Math.sin(q)*2.9;g.add(mesh(new THREE.CylinderGeometry(.07,.09,.45,6),M3(0x8a6a4a),x,.95,z),mesh(new THREE.ConeGeometry(.38,.9,7),M3(0x4f9a5a),x,1.5,z))}
+  const lb=lbl(d.name,n<0?'多項…':n+' 項',col);lb.position.y=4.6;g.add(lb);world.add(g);
+  const L=R-ISL-Rh+.4,mid=(Rh+R-ISL)/2,br=mesh(new THREE.BoxGeometry(L,.14,.9),M3(0xcaa77a),Math.cos(a)*mid,.1,Math.sin(a)*mid);br.rotation.y=-a;world.add(br)});
+ if(lastCur!==cur){lastCur=cur;const span=(nI?R+ISL:Rh)+2,p=new THREE.Vector3(0,span*1.1+4,span*1.6+4);
+  T.cam.position.copy(p).multiplyScalar(.6);T.ctl.target.set(0,0,0);fly(p,new THREE.Vector3(),null,1100)}
+}
+})();
+</script></body></html>
